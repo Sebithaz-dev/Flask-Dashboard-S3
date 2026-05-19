@@ -14,7 +14,7 @@ def dashboard():
     )
 
 
-@main.route("/health")
+@main.route("/status")
 def health():
     return jsonify({
         "status": "ok",
