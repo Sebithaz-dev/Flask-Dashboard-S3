@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<section class="hero">
+    <h2>Dashboard de datos desde Parquet en S3</h2>
+    <p>{{ resumen.estado }}</p>
+</section>
+
+<section class="cards">
+    <div class="card">
+        <h3>Total de registros</h3>
+        <p>{{ resumen.total_registros }}</p>
+    </div>
+
+    <div class="card">
+        <h3>Total de columnas</h3>
+        <p>{{ resumen.total_columnas }}</p>
+    </div>
+</section>
+
+{% if resumen.error %}
+<section class="alert">
+    <strong>Error:</strong>
+    <p>{{ resumen.error }}</p>
+</section>
+{% endif %}
+
+<section class="section">
+    <h3>Columnas detectadas</h3>
+
+    <div class="columns-list">
+        {% for columna in resumen.columnas %}
+            <span>{{ columna }}</span>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="section">
+    <h3>Vista previa de datos</h3>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    {% for columna in resumen.columnas %}
+                        <th>{{ columna }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for fila in resumen.preview %}
+                    <tr>
+                        {% for columna in resumen.columnas %}
+                            <td>{{ fila.get(columna, "") }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% endblock %}

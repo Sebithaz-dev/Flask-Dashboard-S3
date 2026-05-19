@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: flask-dashboard-s3
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: AWS_REGION
+        value: us-east-1
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: S3_PARQUET_KEY
+        sync: false
