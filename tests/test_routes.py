@@ -8,7 +8,10 @@ def test_health_route():
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json["status"] == "ok"
+    assert response.json == {
+        "message": "Flask dashboard funcionando correctamente",
+        "status": "ok",
+    }
 
 
 def test_dashboard_route():
