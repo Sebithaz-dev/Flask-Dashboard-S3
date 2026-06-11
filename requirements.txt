@@ -6,3 +6,5 @@ pyarrow
 boto3
 python-dotenv
 pytest
+joblib
+scikit-learn
