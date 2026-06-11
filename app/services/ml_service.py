@@ -23,7 +23,6 @@ def _descargar_artefactos():
     def _url(key):
         return f"https://{bucket}.s3.{region}.amazonaws.com/{prefix.rstrip('/')}/{key}"
 
-    # --- Método 1: URL pública directa ---
     print(f"[ml_service] Metodo 1: URL publica directa", flush=True)
     try:
         for fname in ["modelo.pkl", "transformers.pkl"]:
@@ -47,7 +46,6 @@ def _descargar_artefactos():
     except Exception as e1:
         print(f"[ml_service] Metodo 1 fallo: {e1}", flush=True)
 
-    # --- Método 2: boto3 (credenciales en entorno) ---
     print(f"[ml_service] Metodo 2: boto3 con credenciales de entorno", flush=True)
     try:
         import boto3
