@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Vista General - NYC Citi Bike{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h2>Vista General del Dataset</h2>
+    <p>Este dashboard presenta el análisis del dataset público <strong>NYC Citi Bike Trips</strong>, curado y almacenado en Amazon S3 como parte de un pipeline DataOps.</p>
+</section>
+
+<section class="kpi-grid" id="kpi-grid">
+    <div class="kpi-card"><div class="kpi-label">Total de Viajes</div><div class="kpi-value" id="kpi-viajes">—</div></div>
+    <div class="kpi-card"><div class="kpi-label">Duración Promedio</div><div class="kpi-value" id="kpi-duracion">—</div></div>
+    <div class="kpi-card"><div class="kpi-label">Estaciones Únicas</div><div class="kpi-value" id="kpi-estaciones">—</div></div>
+    <div class="kpi-card"><div class="kpi-label">Rango de Fechas</div><div class="kpi-value kpi-small" id="kpi-fechas">—</div></div>
+</section>
+
+<section class="chart-section">
+    <div class="section-header">
+        <h3>Distribución de Datos</h3>
+    </div>
+    <div class="chart-grid-2">
+        <div class="chart-card">
+            <h4>Viajes a lo Largo del Tiempo</h4>
+            <canvas id="chart-tiempo"></canvas>
+        </div>
+        <div class="chart-card">
+            <h4>Distribución por Tipo de Usuario</h4>
+            <canvas id="chart-usertype"></canvas>
+        </div>
+        <div class="chart-card">
+            <h4>Distribución de Duración de Viajes</h4>
+            <canvas id="chart-duracion"></canvas>
+        </div>
+        <div class="chart-card">
+            <h4>Distribución por Género</h4>
+            <canvas id="chart-genero"></canvas>
+        </div>
+    </div>
+</section>
+
+<section class="chart-section">
+    <div class="section-header">
+        <h3>Rendimiento del Modelo ML</h3>
+        <p class="section-desc">Métricas obtenidas del modelo entrenado con los datos de Citi Bike</p>
+    </div>
+    <div class="kpi-grid" id="metrics-grid">
+        <div class="kpi-card metric-card"><div class="kpi-label">Accuracy</div><div class="kpi-value" id="metric-accuracy">—</div></div>
+        <div class="kpi-card metric-card"><div class="kpi-label">Recall</div><div class="kpi-value" id="metric-recall">—</div></div>
+        <div class="kpi-card metric-card"><div class="kpi-label">Precision</div><div class="kpi-value" id="metric-precision">—</div></div>
+        <div class="kpi-card metric-card"><div class="kpi-label">F1 Score</div><div class="kpi-value" id="metric-f1">—</div></div>
+        <div class="kpi-card metric-card"><div class="kpi-label">ROC AUC</div><div class="kpi-value" id="metric-auc">—</div></div>
+        <div class="kpi-card metric-card"><div class="kpi-label">Gini</div><div class="kpi-value" id="metric-gini">—</div></div>
+    </div>
+    <div class="chart-grid-2">
+        <div class="chart-card">
+            <h4>Matriz de Confusión</h4>
+            <div id="matriz-confusion" class="matrix-container"></div>
+        </div>
+        <div class="chart-card">
+            <h4>Curva ROC</h4>
+            <canvas id="chart-roc"></canvas>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    cargarOverview();
+</script>
+{% endblock %}

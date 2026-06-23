@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard{% endblock %}
+{% block title %}API Status{% endblock %}
 
 {% block content %}
 
 <section class="hero">
-    <h2>Dashboard de datos desde Parquet en S3</h2>
-    <p>{{ resumen.estado }}</p>
+    <h2>API Flask - NYC Citi Bike Dashboard</h2>
+    <p>El dashboard interactivo se encuentra disponible vía Streamlit en el puerto 8501.</p>
+    <p>Estado de la API: <strong>{{ resumen.estado }}</strong></p>
 </section>
 
 <section class="cards">
@@ -14,7 +15,6 @@
         <h3>Total de registros</h3>
         <p>{{ resumen.total_registros }}</p>
     </div>
-
     <div class="card">
         <h3>Total de columnas</h3>
         <p>{{ resumen.total_columnas }}</p>
@@ -30,7 +30,6 @@
 
 <section class="section">
     <h3>Columnas detectadas</h3>
-
     <div class="columns-list">
         {% for columna in resumen.columnas %}
             <span>{{ columna }}</span>
@@ -40,7 +39,6 @@
 
 <section class="section">
     <h3>Vista previa de datos</h3>
-
     <div class="table-wrapper">
         <table>
             <thead>
@@ -50,7 +48,6 @@
                     {% endfor %}
                 </tr>
             </thead>
-
             <tbody>
                 {% for fila in resumen.preview %}
                     <tr>
@@ -62,6 +59,15 @@
             </tbody>
         </table>
     </div>
+</section>
+
+<section class="section">
+    <h3>Endpoints disponibles</h3>
+    <ul>
+        <li><code>GET /</code> — Esta página</li>
+        <li><code>GET /health</code> — Health check</li>
+        <li><code>POST /predict</code> — Predicción ML</li>
+    </ul>
 </section>
 
 {% endblock %}

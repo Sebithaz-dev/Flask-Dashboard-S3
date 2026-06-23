@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Predicción ML - NYC Citi Bike{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h2>Predicción de Duración de Viaje</h2>
+    <p>Completa los datos del viaje para predecir si la duración será <strong>larga</strong> (&gt; 30 min) o <strong>corta</strong> (&le; 30 min) usando un modelo de regresión logística entrenado con scikit-learn.</p>
+</section>
+
+{% if not modelo_disponible %}
+<div class="alert alert-warning">
+    El modelo ML no está disponible en este momento. Verifica que los artefactos estén en S3.
+</div>
+{% endif %}
+
+<div class="prediction-layout">
+    <div class="prediction-form">
+        <h3>Datos de Entrada</h3>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="input-station">ID de Estación de Inicio</label>
+                <input type="number" id="input-station" class="form-input" value="3160" min="0" max="3686">
+            </div>
+            <div class="form-group">
+                <label for="input-usertype">Tipo de Usuario</label>
+                <select id="input-usertype" class="form-input">
+                    <option value="Subscriber">Subscriber</option>
+                    <option value="Customer">Customer</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="input-gender">Género</label>
+                <select id="input-gender" class="form-input">
+                    <option value="male">male</option>
+                    <option value="female" selected>female</option>
+                    <option value="unknown">unknown</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="input-age">Edad</label>
+                <input type="number" id="input-age" class="form-input" value="35" min="0" max="90">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="input-hour">Hora del Día</label>
+                <input type="range" id="input-hour" class="form-range" min="0" max="23" value="10">
+                <span class="range-value" id="display-hour">10</span>
+            </div>
+            <div class="form-group">
+                <label for="input-month">Mes</label>
+                <input type="range" id="input-month" class="form-range" min="1" max="12" value="6">
+                <span class="range-value" id="display-month">6</span>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="input-dayofweek">Día de la Semana</label>
+                <select id="input-dayofweek" class="form-input">
+                    <option value="0">Lunes</option>
+                    <option value="1">Martes</option>
+                    <option value="2">Miércoles</option>
+                    <option value="3">Jueves</option>
+                    <option value="4">Viernes</option>
+                    <option value="5">Sábado</option>
+                    <option value="6">Domingo</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Fin de Semana</label>
+                <div class="form-input-static" id="display-weekend">No</div>
+            </div>
+        </div>
+
+        <button id="btn-predecir" class="btn btn-primary btn-block">Predecir</button>
+    </div>
+
+    <div class="prediction-result" id="prediction-result" style="display:none;">
+        <h3>Resultado</h3>
+        <div class="result-metrics">
+            <div class="result-card">
+                <div class="result-label">Predicción</div>
+                <div class="result-value" id="result-etiqueta">—</div>
+            </div>
+            <div class="result-card">
+                <div class="result-label">Probabilidad (viaje largo)</div>
+                <div class="result-value" id="result-probabilidad">—</div>
+            </div>
+            </div>
+        <div class="progress-bar-container">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="result-message" id="result-message"></div>
+
+        <details class="debug-details">
+            <summary>Ver datos enviados al modelo</summary>
+            <pre id="debug-json"></pre>
+        </details>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    iniciarPrediccion();
+</script>
+{% endblock %}

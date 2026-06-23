@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Exploración - NYC Citi Bike{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h2>Exploración de Datos</h2>
+    <p>Usa los filtros para segmentar los datos. Los gráficos y la tabla se actualizan automáticamente.</p>
+</section>
+
+<div class="exploration-layout">
+    <aside class="filters-panel" id="filters-panel">
+        <h3>Filtros</h3>
+
+        <div class="filter-group">
+            <label>Rango de Fechas</label>
+            <input type="date" id="filter-fecha-desde" class="filter-input">
+            <input type="date" id="filter-fecha-hasta" class="filter-input">
+        </div>
+
+        <div class="filter-group">
+            <label>Rango de Hora</label>
+            <div class="range-row">
+                <input type="number" id="filter-hora-min" min="0" max="23" value="0" class="filter-input">
+                <span>a</span>
+                <input type="number" id="filter-hora-max" min="0" max="23" value="23" class="filter-input">
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <label>Tipo de Usuario</label>
+            <select id="filter-usertype" class="filter-input" multiple size="2">
+                <option value="Subscriber" selected>Subscriber</option>
+                <option value="Customer" selected>Customer</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Género</label>
+            <select id="filter-gender" class="filter-input" multiple size="3">
+                <option value="male" selected>male</option>
+                <option value="female" selected>female</option>
+                <option value="unknown" selected>unknown</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Día de la Semana</label>
+            <select id="filter-dayofweek" class="filter-input" multiple size="4">
+                <option value="0" selected>Lunes</option>
+                <option value="1" selected>Martes</option>
+                <option value="2" selected>Miércoles</option>
+                <option value="3" selected>Jueves</option>
+                <option value="4" selected>Viernes</option>
+                <option value="5" selected>Sábado</option>
+                <option value="6" selected>Domingo</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>Rango de Edad</label>
+            <div class="range-row">
+                <input type="number" id="filter-age-min" min="0" max="90" value="0" class="filter-input">
+                <span>a</span>
+                <input type="number" id="filter-age-max" min="0" max="90" value="90" class="filter-input">
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <label>Tipo de Día</label>
+            <select id="filter-is-weekend" class="filter-input">
+                <option value="">Todos</option>
+                <option value="0">Solo laboral</option>
+                <option value="1">Solo finde</option>
+            </select>
+        </div>
+
+        <button id="btn-aplicar-filtros" class="btn btn-primary">Aplicar Filtros</button>
+        <button id="btn-limpiar-filtros" class="btn btn-secondary">Limpiar</button>
+    </aside>
+
+    <div class="exploration-content">
+        <div class="info-bar">
+            <span id="datos-info">Cargando datos...</span>
+        </div>
+
+        <div class="chart-grid-2">
+            <div class="chart-card">
+                <h4>Viajes por Hora del Día</h4>
+                <canvas id="ex-chart-hora"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>Viajes por Día de la Semana</h4>
+                <canvas id="ex-chart-dia"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>Distribución de Duración</h4>
+                <canvas id="ex-chart-duracion"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>Distribución por Edad</h4>
+                <canvas id="ex-chart-edad"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-card full-width">
+            <h4>Top 15 Estaciones más Usadas</h4>
+            <canvas id="ex-chart-estaciones"></canvas>
+        </div>
+
+        <section class="table-section">
+            <h3>Vista de Datos</h3>
+            <div class="table-controls">
+                <span id="table-info"></span>
+                <button id="btn-csv" class="btn btn-secondary">Descargar CSV</button>
+            </div>
+            <div class="table-wrapper">
+                <table id="data-table">
+                    <thead id="table-head"></thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination"></div>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    iniciarExploracion();
+</script>
+{% endblock %}
