@@ -1,5 +1,4 @@
 import os
-import sys
 import joblib
 import numpy as np
 import pandas as pd
@@ -74,6 +73,22 @@ def cargar_modelo():
     _modelo, _transformers = _descargar_artefactos()
 
 
+def _add_time_features(df):
+    out = df.copy()
+    out["hour_sin"] = np.sin(2 * np.pi * out["hour"] / 24)
+    out["hour_cos"] = np.cos(2 * np.pi * out["hour"] / 24)
+    out["month_sin"] = np.sin(2 * np.pi * (out["month"] - 1) / 12)
+    out["month_cos"] = np.cos(2 * np.pi * (out["month"] - 1) / 12)
+    out["dayofweek_sin"] = np.sin(2 * np.pi * out["dayofweek"] / 7)
+    out["dayofweek_cos"] = np.cos(2 * np.pi * out["dayofweek"] / 7)
+    out["is_rush_hour"] = (
+        ((out["hour"] >= 7) & (out["hour"] <= 9))
+        | ((out["hour"] >= 17) & (out["hour"] <= 19))
+    ).astype(int)
+    out["is_night"] = ((out["hour"] <= 5) | (out["hour"] >= 22)).astype(int)
+    return out
+
+
 def predecir(datos):
     global _modelo, _transformers
     if _modelo is None:
@@ -86,21 +101,25 @@ def predecir(datos):
     df["start_station_freq"] = np.log1p(
         df["start_station_id"].map(t["station_freq"]).fillna(0)
     )
+    df = _add_time_features(df)
     for col in ["usertype", "gender"]:
         le = t["label_encoders"][col]
-        df[col] = (
-            df[col]
-            .astype(str)
-            .map(lambda x: le.transform([x])[0] if x in le.classes_ else -1)
+        values = df[col].astype(str)
+        if col == "gender":
+            values = values.str.title()
+        df[col] = values.map(
+            lambda x, le=le: le.transform([x])[0] if x in le.classes_ else -1
         )
     X = df[t["feature_cols"]].astype(float)
     X_s = t["scaler"].transform(X)
     prob = _modelo.predict_proba(X_s)[0, 1]
-    pred = int(prob >= 0.65)
+    decision_threshold = float(t.get("decision_threshold", 0.65))
+    pred = int(prob >= decision_threshold)
     return {
         "probabilidad_largo": round(float(prob), 4),
         "prediccion": pred,
         "etiqueta": "largo" if pred else "corto",
+        "umbral_decision": round(decision_threshold, 4),
     }
 
 

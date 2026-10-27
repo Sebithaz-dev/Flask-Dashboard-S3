@@ -32,6 +32,8 @@ def test_api_metricas_modelo(client):
     data = client.get("/api/modelo/metricas").get_json()
 
     assert 0 <= data["accuracy"] <= 1
+    assert 0 <= data["pr_auc"] <= 1
+    assert 0 <= data["umbral_decision"] <= 1
     assert len(data["matriz_confusion"]) == 2
 
 
@@ -62,7 +64,12 @@ def test_predict_error_de_procesamiento_devuelve_500(client, monkeypatch):
 
 
 def test_predict_ok(client, monkeypatch):
-    esperado = {"probabilidad_largo": 0.7, "prediccion": 1, "etiqueta": "largo"}
+    esperado = {
+        "probabilidad_largo": 0.7,
+        "prediccion": 1,
+        "etiqueta": "largo",
+        "umbral_decision": 0.46,
+    }
     monkeypatch.setattr("app.routes.disponible", lambda: True)
     monkeypatch.setattr("app.routes.predecir", lambda datos: esperado)
 
