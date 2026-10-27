@@ -12,6 +12,8 @@ services:
       - key: AWS_REGION
         value: us-east-1
       - key: S3_BUCKET_NAME
-        sync: false
+        value: citibike-datalake-seb-690247773624
       - key: S3_PARQUET_KEY
-        sync: false
+        value: curated/citibike_trips/citibike_dashboard_sample.parquet
+      - key: S3_MODEL_PREFIX
+        value: models/
