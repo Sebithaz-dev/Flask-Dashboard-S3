@@ -65,7 +65,9 @@ function renderModelMetrics(m) {
     setMetric("metric-precision", m.precision);
     setMetric("metric-f1", m.f1_score);
     setMetric("metric-auc", m.roc_auc);
+    setMetric("metric-pr-auc", m.pr_auc);
     setMetric("metric-gini", m.gini);
+    setMetric("metric-umbral", m.umbral_decision);
 }
 
 function renderOverviewCharts(data) {
@@ -551,13 +553,14 @@ async function predecir() {
 
         const bar = document.getElementById("progress-bar");
         bar.style.width = (result.probabilidad_largo * 100) + "%";
-        bar.style.background = result.probabilidad_largo > 0.65 ? "#ef4444" : "#10b981";
+        const umbral = result.umbral_decision !== undefined ? result.umbral_decision : 0.65;
+        bar.style.background = result.probabilidad_largo >= umbral ? "#ef4444" : "#10b981";
 
         const msg = document.getElementById("result-message");
         if (result.etiqueta === "largo") {
-            msg.innerHTML = `El modelo predice que este viaje será <strong>largo</strong> (> 30 min) con una probabilidad del <strong>${(result.probabilidad_largo * 100).toFixed(1)}%</strong>.`;
+            msg.innerHTML = `El modelo predice que este viaje será <strong>largo</strong> (> 15 min) con una probabilidad del <strong>${(result.probabilidad_largo * 100).toFixed(1)}%</strong>.`;
         } else {
-            msg.innerHTML = `El modelo predice que este viaje será <strong>corto</strong> (≤ 30 min) con una probabilidad del <strong>${((1 - result.probabilidad_largo) * 100).toFixed(1)}%</strong>.`;
+            msg.innerHTML = `El modelo predice que este viaje será <strong>corto</strong> (≤ 15 min) con una probabilidad del <strong>${((1 - result.probabilidad_largo) * 100).toFixed(1)}%</strong>.`;
         }
 
         document.getElementById("debug-json").textContent = JSON.stringify({ request: datos, response: result }, null, 2);

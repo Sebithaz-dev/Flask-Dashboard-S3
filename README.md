@@ -13,14 +13,14 @@ Incluye CI/CD con GitHub Actions, contenedorización con Docker, despliegue auto
 - **Tres páginas interactivas**: Vista General (KPIs + métricas del modelo), Exploración (filtros + charts + tabla), Predicción ML (formulario con validación)
 - **Gráficos en el cliente**: Chart.js renderiza en el navegador — Flask solo envía JSON liviano
 - **API REST**: Endpoints JSON para consumir datos, filtros y predicciones desde cualquier frontend
-- **Modelo ML**: Integración con modelo Logistic Regression entrenado en pipeline separado ([Model-Training-S3](https://github.com/Sebithaz-dev/Model-Training-S3))
+- **Modelo ML**: Integración con modelo HistGradientBoosting entrenado en pipeline separado ([Model-Training-S3](https://github.com/Sebithaz-dev/Model-Training-S3))
 - **Despliegue automático**: CI/CD con GitHub Actions → Kubernetes simulado (kind) → GHCR → Render
 
 ## Dashboard Interactivo
 
 | Página | Ruta | Contenido |
 |--------|------|-----------|
-| **Vista General** | `/` | KPIs (viajes, duración, estaciones), charts de distribución (tiempo, usuario, género, duración), métricas del modelo ML (accuracy, recall, F1, ROC AUC, Gini) y matriz de confusión |
+| **Vista General** | `/` | KPIs (viajes, duración, estaciones), charts de distribución (tiempo, usuario, género, duración), métricas del modelo ML (accuracy, recall, F1, ROC AUC, PR AUC, Gini, umbral) y matriz de confusión |
 | **Exploración** | `/exploracion` | Panel de filtros (fecha, hora, día, usuario, género, edad, estación), 5 charts interactivos (hora, día, duración, edad, top estaciones), tabla paginada con descarga CSV |
 | **Predicción ML** | `/prediccion` | Formulario con validación para predecir duración de viaje (larga > 15 min / corta) usando el modelo entrenado |
 
@@ -158,8 +158,8 @@ El pipeline despliega estos manifiestos en un cluster **kind** (Kubernetes simul
 | GET | `/health` | Health check (`{"status": "ok"}`), usado por Docker y Render |
 | GET | `/api/resumen` | KPIs + agregaciones para charts |
 | GET | `/api/datos?filtros=...` | Datos filtrados con paginación |
-| GET | `/api/modelo/metricas` | Accuracy, Recall, F1, ROC AUC, Gini, Matriz de Confusión |
-| POST | `/predict` | Predicción ML (recibe JSON con features, devuelve probabilidad) |
+| GET | `/api/modelo/metricas` | Accuracy, Recall, F1, ROC AUC, PR AUC, Gini, umbral y Matriz de Confusión |
+| POST | `/predict` | Predicción ML (recibe JSON con features, devuelve probabilidad, etiqueta y umbral) |
 
 ### Ejemplo `POST /predict`
 
@@ -197,8 +197,10 @@ Predicción viaje corto:
 
 El modelo se entrena en un repositorio independiente: [Model-Training-S3](https://github.com/Sebithaz-dev/Model-Training-S3)
 
-- Algoritmo: **Logistic Regression** con `class_weight="balanced"`
-- Umbral de clasificación: **0.65**
+- Algoritmo: **HistGradientBoostingClassifier** con `class_weight="balanced"`
+- Split: **temporal 70/10/20** por `starttime`
+- Umbral de clasificación: **0.46**, optimizado en validación maximizando F1
+- Features: temporales cíclicas, `is_rush_hour`, `is_night`, `start_station_freq`, `usertype`, `gender`
 - Objetivo: predecir si un viaje dura más de **15 minutos** (900 segundos)
 - Artefactos (`modelo.pkl`, `transformers.pkl`, `metricas.json`) se suben a S3 y el dashboard los descarga automáticamente
 
@@ -206,12 +208,14 @@ El modelo se entrena en un repositorio independiente: [Model-Training-S3](https:
 
 | Métrica | Valor |
 |---------|-------|
-| Accuracy | 0.7281 |
-| Recall (largo) | 0.0528 |
-| Precision (largo) | 0.5679 |
-| F1 Score (largo) | 0.0966 |
-| ROC AUC | 0.5890 |
-| Gini | 0.178 |
+| Accuracy | 0.5500 |
+| Recall (largo) | 0.7035 |
+| Precision (largo) | 0.3473 |
+| F1 Score (largo) | 0.4650 |
+| ROC AUC | 0.6505 |
+| PR AUC | 0.4455 |
+| Gini | 0.3009 |
+| Umbral decisión | 0.46 |
 
 > Las métricas se cargan desde `metricas.json` en S3. Si no está disponible, se usan valores de fallback.
 

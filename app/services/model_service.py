@@ -25,24 +25,32 @@ def _cargar_metricas():
 
 
 def _fallback_metricas():
-    tn, fp = 67564, 1047
-    fn, tp = 24699, 1376
+    tn, fp = 33557, 34806
+    fn, tp = 7804, 18519
     total = tn + fp + fn + tp
     return {
         "accuracy": round((tp + tn) / total, 4),
         "recall": round(tp / (tp + fn), 4),
         "precision": round(tp / (tp + fp), 4),
         "f1_score": round(2 * tp / (2 * tp + fp + fn), 4),
-        "roc_auc": 0.5890,
-        "gini": round(2 * 0.5890 - 1, 4),
+        "roc_auc": 0.6505,
+        "pr_auc": 0.4455,
+        "gini": round(2 * 0.6505 - 1, 4),
         "umbral": 900,
         "umbral_minutos": 15,
+        "umbral_decision": 0.46,
         "matriz_confusion": [[tn, fp], [fn, tp]],
         "clases": ["corto", "largo"],
-        "proporcion_largos": 0.275,
-        "train_size": 378744,
+        "proporcion_largos": 0.278,
+        "train_size": 331401,
+        "validation_size": 47343,
         "test_size": 94686,
-        "nota": "Métricas del último entrenamiento (Logistic Regression, 473k registros)",
+        "modelo": "HistGradientBoostingClassifier",
+        "split_strategy": "temporal",
+        "nota": (
+            "Métricas del último entrenamiento "
+            "(HistGradientBoosting, split temporal, 473k registros)"
+        ),
     }
 
 

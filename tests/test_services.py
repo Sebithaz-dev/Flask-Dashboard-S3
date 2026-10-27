@@ -128,7 +128,11 @@ def test_metricas_de_s3_sobrescriben_el_respaldo(monkeypatch):
 # --- ml_service ------------------------------------------------------------
 
 class _ModeloFalso:
+    def __init__(self):
+        self.X = None
+
     def predict_proba(self, X):
+        self.X = X
         return np.array([[0.2, 0.8]])
 
 
@@ -148,9 +152,34 @@ def _transformers():
     return {
         "station_freq": {3100: 10},
         "label_encoders": {"usertype": _EncoderFalso(), "gender": _EncoderFalso()},
-        "feature_cols": ["hour", "usertype", "gender", "start_station_freq"],
+        "feature_cols": [
+            "hour",
+            "start_station_freq",
+            "hour_sin",
+            "hour_cos",
+            "is_rush_hour",
+            "is_night",
+            "usertype",
+            "gender",
+        ],
         "scaler": _EscaladorIdentidad(),
+        "decision_threshold": 0.7,
     }
+
+
+def _payload(**overrides):
+    datos = {
+        "hour": 8,
+        "month": 7,
+        "dayofweek": 3,
+        "is_weekend": 0,
+        "age": 32,
+        "usertype": "Subscriber",
+        "gender": "Male",
+        "start_station_id": 3100,
+    }
+    datos.update(overrides)
+    return datos
 
 
 def test_sin_bucket_el_modelo_no_esta_disponible(monkeypatch):
@@ -165,8 +194,22 @@ def test_prediccion_con_modelo_cargado(monkeypatch):
     monkeypatch.setattr(ml_service, "_modelo", _ModeloFalso())
     monkeypatch.setattr(ml_service, "_transformers", _transformers())
 
-    r = ml_service.predecir(
-        {"hour": 8, "usertype": "Subscriber", "gender": "Male", "start_station_id": 3100}
-    )
+    r = ml_service.predecir(_payload())
 
-    assert r == {"probabilidad_largo": 0.8, "prediccion": 1, "etiqueta": "largo"}
+    assert r == {
+        "probabilidad_largo": 0.8,
+        "prediccion": 1,
+        "etiqueta": "largo",
+        "umbral_decision": 0.7,
+    }
+
+
+def test_prediccion_normaliza_genero_minuscula(monkeypatch):
+    modelo = _ModeloFalso()
+    monkeypatch.setattr(ml_service, "_modelo", modelo)
+    monkeypatch.setattr(ml_service, "_transformers", _transformers())
+
+    r = ml_service.predecir(_payload(gender="male"))
+
+    assert r["umbral_decision"] == 0.7
+    assert modelo.X[0, 7] == 2
