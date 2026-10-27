@@ -79,11 +79,26 @@ Copia `.env.example` a `.env`:
 FLASK_ENV=development
 SECRET_KEY=dev-secret-key
 AWS_REGION=us-east-1
-S3_BUCKET_NAME=nombre-de-tu-bucket
-S3_PARQUET_KEY=landing/archivo.parquet
+S3_BUCKET_NAME=citibike-datalake-seb-690247773624
+S3_PARQUET_KEY=curated/citibike_trips/citibike_dashboard_sample.parquet
+S3_MODEL_PREFIX=models/
 ```
 
 > **Nota**: No se requieren credenciales AWS (`AWS_ACCESS_KEY_ID`, etc.). El dashboard lee el Parquet desde una URL pública. Si el bucket no es público, el modelo ML intenta boto3 como fallback.
+
+### Datos en S3
+
+Bucket demo: `citibike-datalake-seb-690247773624` (público, solo lectura).
+
+| Key | Uso |
+|-----|-----|
+| `curated/citibike_trips/citibike_dashboard_sample.parquet` | Dataset del dashboard (50k filas) |
+| `curated/citibike_trips/citibike_curated.snappy.parquet` | Dataset completo para entrenamiento (473k filas) |
+| `models/modelo.pkl`, `models/transformers.pkl`, `models/metricas.json` | Artefactos del modelo |
+
+El dashboard usa el sample para responder rápido y el pipeline de entrenamiento
+usa el dataset completo. Como el bucket es público, Render no necesita
+credenciales AWS.
 
 ## Uso local
 
@@ -201,7 +216,7 @@ El modelo se entrena en un repositorio independiente: [Model-Training-S3](https:
 
 ### Buenas prácticas ya aplicadas
 
-- Las variables de entorno se configuran en Render como secretos (`sync: false` en `render.yaml`).
-- El bucket S3 es público (no se requieren credenciales AWS en el dashboard).
+- Las variables de S3 (`S3_BUCKET_NAME`, `S3_PARQUET_KEY`, `S3_MODEL_PREFIX`) se definen en `render.yaml` y `.env`.
+- El bucket S3 es público de solo lectura (no se requieren credenciales AWS en el dashboard).
 - `.gitignore` excluye `.env`, `__pycache__`, cobertura y artefactos SARIF.
 - Los endpoints `/health` y `/api/*` no exponen datos sensibles.
