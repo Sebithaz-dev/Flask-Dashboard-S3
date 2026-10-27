@@ -1,5 +1,9 @@
 # Flask-Dashboard-S3
 
+[![CI/CD](https://github.com/Sebithaz-dev/Flask-Dashboard-S3/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Sebithaz-dev/Flask-Dashboard-S3/actions/workflows/ci-cd.yml)
+[![Security & Quality](https://github.com/Sebithaz-dev/Flask-Dashboard-S3/actions/workflows/security.yml/badge.svg)](https://github.com/Sebithaz-dev/Flask-Dashboard-S3/actions/workflows/security.yml)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Sebithaz-dev_Flask-Dashboard-S3&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Sebithaz-dev_Flask-Dashboard-S3)
+
 Dashboard web interactivo construido con **Flask + Chart.js** que consume un dataset Parquet curado desde Amazon S3, como etapa final de un pipeline DataOps sobre el dataset público **NYC Citi Bike Trips**.
 
 Incluye CI/CD con GitHub Actions, contenedorización con Docker, despliegue automático en Render e integración con un modelo de clasificación ML entrenado externamente.
@@ -43,12 +47,16 @@ Flask-Dashboard-S3/
 │       └── js/dashboard.js         # Lógica: fetch API, Chart.js, filtros, tabla, paginación
 ├── tests/
 │   └── test_routes.py              # Pytest para rutas principales
-├── .github/workflows/ci-cd.yml     # Pipeline CI: test → docker → deploy
+├── .github/workflows/
+│   ├── ci-cd.yml                   # Pipeline CI: test → docker → healthcheck → deploy
+│   └── security.yml                # Snyk + SonarCloud (PR/push/semanal)
 ├── .env.example
-├── Dockerfile
+├── Dockerfile                      # Incluye HEALTHCHECK contra /health
 ├── docker-compose.yml
-├── render.yaml
+├── render.yaml                     # healthCheckPath: /health
 ├── requirements.txt
+├── requirements-dev.txt            # Dependencias de test + cobertura
+├── sonar-project.properties        # Config de SonarCloud
 └── run.py
 ```
 
@@ -59,7 +67,8 @@ Flask-Dashboard-S3/
 - Bucket S3 público con archivo Parquet curado
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt        # runtime
+pip install -r requirements-dev.txt    # runtime + pytest + cobertura
 ```
 
 ## Configuración
@@ -95,7 +104,7 @@ La app queda disponible en `http://localhost:5000`.
 | GET | `/` | Página Vista General |
 | GET | `/exploracion` | Página Exploración |
 | GET | `/prediccion` | Página Predicción ML |
-| GET | `/health` | Health check (`{"status": "ok"}`) |
+| GET | `/health` | Health check (`{"status": "ok"}`), usado por Docker y Render |
 | GET | `/api/resumen` | KPIs + agregaciones para charts |
 | GET | `/api/datos?filtros=...` | Datos filtrados con paginación |
 | GET | `/api/modelo/metricas` | Accuracy, Recall, F1, ROC AUC, Gini, Matriz de Confusión |
@@ -157,14 +166,42 @@ El modelo se entrena en un repositorio independiente: [Model-Training-S3](https:
 
 ## CI/CD
 
-- **GitHub Actions**: ejecuta `pytest` automáticamente en cada push
-- **Render**: `render.yaml` con `autoDeploy: true` → despliegue automático al pasar los tests
-- **Docker**: imagen basada en `python:3.11-slim`, servida con Gunicorn (multi-thread)
-- **Contenedor único**: Flask como único proceso (sin Streamlit)
+- **GitHub Actions `ci-cd.yml`**: ejecuta tests con cobertura, construye la imagen Docker, valida `/health` dentro del contenedor y despliega en Render.
+- **GitHub Actions `security.yml`**: analiza dependencias y código con Snyk, y publica métricas de calidad/cobertura en SonarCloud.
+- **Render**: `render.yaml` con `autoDeploy: true` y `healthCheckPath: /health`.
+- **Docker**: imagen basada en `python:3.11-slim`, servida con Gunicorn (multi-thread) y con `HEALTHCHECK` contra `/health`.
+- **Contenedor único**: Flask como único proceso (sin Streamlit).
 
-## Seguridad
+## Seguridad y calidad
 
-- Las variables de entorno se configuran en Render como secretos (`sync: false` en `render.yaml`)
-- El bucket S3 es público (no se requieren credenciales AWS en el dashboard)
-- `.gitignore` excluye `.env`, `__pycache__` y archivos de credenciales
-- Los endpoints `/health` y `/api/*` no exponen datos sensibles
+### Health check
+
+- `GET /health` responde `{"status": "ok", "message": "Flask dashboard funcionando correctamente"}`.
+- Docker ejecuta `HEALTHCHECK` cada 30s contra `/health`.
+- Render usa `healthCheckPath: /health` antes de enrutar tráfico.
+- `ci-cd.yml` levanta el contenedor y valida `/health` antes del deploy.
+
+### Snyk
+
+1. Crear una cuenta en [Snyk](https://app.snyk.io) y habilitar **Snyk Code**.
+2. Generar un API token y cargarlo como secret `SNYK_TOKEN`.
+3. `security.yml` ejecuta `snyk test` sobre `requirements.txt` y `requirements-dev.txt`, y `snyk code test` sobre el código. Los resultados se suben como SARIF a GitHub Security. Es informativo al inicio (`continue-on-error`).
+
+### SonarCloud
+
+1. Importar el repositorio en [SonarCloud](https://sonarcloud.io) bajo la organización `sebithaz-dev`.
+2. Desactivar **Automatic Analysis** en *Administration → Analysis Method*.
+3. Generar un token en *My Account → Security* y cargarlo como secret `SONAR_TOKEN`.
+4. La cobertura se genera con `pytest --cov=app` y se publica mediante `sonar-project.properties`.
+
+### Secretos y variables
+
+- **Secrets:** `SNYK_TOKEN`, `SONAR_TOKEN`, `RENDER_DEPLOY_HOOK_URL`.
+- **Variables:** `SONAR_ORGANIZATION`, `SONAR_PROJECT_KEY`.
+
+### Buenas prácticas ya aplicadas
+
+- Las variables de entorno se configuran en Render como secretos (`sync: false` en `render.yaml`).
+- El bucket S3 es público (no se requieren credenciales AWS en el dashboard).
+- `.gitignore` excluye `.env`, `__pycache__`, cobertura y artefactos SARIF.
+- Los endpoints `/health` y `/api/*` no exponen datos sensibles.

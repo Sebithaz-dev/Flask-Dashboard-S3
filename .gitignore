@@ -6,3 +6,7 @@ venv/
 .pytest_cache/
 .DS_Store
 archivos-temp
+.coverage
+coverage.xml
+htmlcov/
+*.sarif
