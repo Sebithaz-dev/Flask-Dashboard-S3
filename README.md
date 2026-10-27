@@ -14,7 +14,7 @@ Incluye CI/CD con GitHub Actions, contenedorización con Docker, despliegue auto
 - **Gráficos en el cliente**: Chart.js renderiza en el navegador — Flask solo envía JSON liviano
 - **API REST**: Endpoints JSON para consumir datos, filtros y predicciones desde cualquier frontend
 - **Modelo ML**: Integración con modelo Logistic Regression entrenado en pipeline separado ([Model-Training-S3](https://github.com/Sebithaz-dev/Model-Training-S3))
-- **Despliegue automático**: CI/CD con GitHub Actions + Render (autoDeploy)
+- **Despliegue automático**: CI/CD con GitHub Actions → Kubernetes simulado (kind) → GHCR → Render
 
 ## Dashboard Interactivo
 
@@ -46,13 +46,17 @@ Flask-Dashboard-S3/
 │       ├── css/styles.css          # Estilos con glassmorphism
 │       └── js/dashboard.js         # Lógica: fetch API, Chart.js, filtros, tabla, paginación
 ├── tests/
-│   └── test_routes.py              # Pytest para rutas principales
+│   ├── test_routes.py              # Health y página principal
+│   ├── test_api.py                 # Páginas HTML y API REST
+│   └── test_services.py            # Servicios S3, parquet, métricas y modelo
+├── k8s/                            # Deployment, Service, HPA, PDB, CronJob, ConfigMap
 ├── .github/workflows/
 │   ├── ci-cd.yml                   # Pipeline CI: test → docker → healthcheck → deploy
 │   └── security.yml                # Snyk + SonarCloud (PR/push/semanal)
 ├── .env.example
 ├── Dockerfile                      # Incluye HEALTHCHECK contra /health
-├── docker-compose.yml
+├── docker-compose.yml              # train + dashboard (2 réplicas) + nginx
+├── nginx.conf                      # Balanceador de las réplicas
 ├── render.yaml                     # healthCheckPath: /health
 ├── requirements.txt
 ├── requirements-dev.txt            # Dependencias de test + cobertura
@@ -106,11 +110,43 @@ credenciales AWS.
 # Sin Docker
 python run.py
 
-# Con Docker
-docker compose up --build
+# Con Docker Compose (2 réplicas del dashboard detrás de nginx)
+docker compose up -d --build
+
+# Sistema completo: entrena el modelo y luego levanta el dashboard
+docker compose --profile train up -d --build
 ```
 
 La app queda disponible en `http://localhost:5000`.
+
+## Orquestación
+
+### Docker Compose (`docker-compose.yml`)
+
+| Servicio | Rol | Configuración clave |
+|---|---|---|
+| `train` (perfil `train`) | Job de entrenamiento construido desde [Model-Training-S3](https://github.com/Sebithaz-dev/Model-Training-S3) | Se ejecuta una vez; límite 2 CPU / 2 GB |
+| `dashboard` | Microservicio Flask | 2 réplicas, `depends_on: train` (completado con éxito), healthcheck, `restart: unless-stopped`, sistema de archivos de solo lectura, límite 1 CPU / 768 MB |
+| `proxy` | nginx como balanceador | Expone el puerto 5000 y reparte entre las réplicas; arranca cuando el dashboard está sano |
+
+Escalar: `docker compose up -d --scale dashboard=3`. Workers e hilos de gunicorn se ajustan con `GUNICORN_WORKERS` y `GUNICORN_THREADS`.
+
+### Kubernetes (`k8s/`)
+
+| Manifiesto | Qué define |
+|---|---|
+| `dashboard-deployment.yaml` | 2 réplicas, rolling update sin indisponibilidad, probes de readiness/liveness en `/health`, requests/limits, usuario no-root y FS de solo lectura |
+| `dashboard-hpa.yaml` | Autoescalado de 2 a 5 réplicas al 70 % de CPU |
+| `dashboard-pdb.yaml` | Siempre al menos 1 réplica disponible |
+| `dashboard-service.yaml` | Service `ClusterIP` en el puerto 80 |
+| `train-cronjob.yaml` | Reentrenamiento semanal (domingo 2am UTC), sin ejecuciones concurrentes |
+| `configmap.yaml` | Configuración de S3 compartida por ambos |
+
+```bash
+kubectl apply -k k8s/
+```
+
+El pipeline despliega estos manifiestos en un cluster **kind** (Kubernetes simulado) en cada PR, con la imagen del commit.
 
 ## Endpoints API
 
@@ -181,10 +217,16 @@ El modelo se entrena en un repositorio independiente: [Model-Training-S3](https:
 
 ## CI/CD
 
-- **GitHub Actions `ci-cd.yml`**: ejecuta tests con cobertura, construye la imagen Docker, valida `/health` dentro del contenedor y despliega en Render.
+- **GitHub Actions `ci-cd.yml`**, en cadena (`needs`):
+  1. `test`: pytest con cobertura mínima del 70 % (`--cov-fail-under=70`).
+  2. `docker-build`: imagen con tag = SHA del commit y smoke test de `/health` dentro del contenedor.
+  3. `k8s-staging`: crea un cluster kind, aplica `k8s/`, fija la imagen del commit, espera el rollout y prueba `/health` a través del Service.
+  4. `publish` (solo push a `main`): publica `ghcr.io/sebithaz-dev/flask-dashboard-s3:<sha>` y `:latest`.
+  5. `deploy` (solo push a `main`, environment `production`): dispara el deploy en Render.
+- **Dependabot** (`.github/dependabot.yml`): PRs semanales para `pip`, imagen base de Docker y GitHub Actions.
 - **GitHub Actions `security.yml`**: analiza dependencias y código con Snyk, y publica métricas de calidad/cobertura en SonarCloud.
-- **Render**: `render.yaml` con `autoDeploy: true` y `healthCheckPath: /health`.
-- **Docker**: imagen basada en `python:3.11-slim`, servida con Gunicorn (multi-thread) y con `HEALTHCHECK` contra `/health`.
+- **Render**: `render.yaml` con `autoDeploy: false` (solo despliega el pipeline, después de pasar la CI) y `healthCheckPath: /health`.
+- **Docker**: imagen basada en `python:3.11-slim`, usuario sin privilegios, `.dockerignore`, servida con Gunicorn (workers e hilos configurables por `GUNICORN_CMD_ARGS`) y con `HEALTHCHECK` contra `/health`.
 - **Contenedor único**: Flask como único proceso (sin Streamlit).
 
 ## Seguridad y calidad
@@ -200,7 +242,7 @@ El modelo se entrena en un repositorio independiente: [Model-Training-S3](https:
 
 1. Crear una cuenta en [Snyk](https://app.snyk.io) y habilitar **Snyk Code**.
 2. Generar un API token y cargarlo como secret `SNYK_TOKEN`.
-3. `security.yml` ejecuta `snyk test` sobre `requirements.txt` y `requirements-dev.txt`, y `snyk code test` sobre el código. Los resultados se suben como SARIF a GitHub Security. Es informativo al inicio (`continue-on-error`).
+3. `security.yml` ejecuta `snyk test` sobre `requirements.txt` y `requirements-dev.txt`, y `snyk code test` sobre el código. Los resultados se suben como SARIF a GitHub Security. El escaneo de dependencias de runtime es **bloqueante** (falla ante vulnerabilidades `high`/`critical`); dependencias de desarrollo y Snyk Code quedan como alertas.
 
 ### SonarCloud
 
@@ -208,6 +250,7 @@ El modelo se entrena en un repositorio independiente: [Model-Training-S3](https:
 2. Desactivar **Automatic Analysis** en *Administration → Analysis Method*.
 3. Generar un token en *My Account → Security* y cargarlo como secret `SONAR_TOKEN`.
 4. La cobertura se genera con `pytest --cov=app` y se publica mediante `sonar-project.properties`.
+5. `sonar.qualitygate.wait=true`: el scan falla si no se cumple el Quality Gate.
 
 ### Secretos y variables
 

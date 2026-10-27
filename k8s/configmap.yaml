@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: citibike-config
+  namespace: citibike
+data:
+  AWS_REGION: us-east-1
+  S3_BUCKET_NAME: citibike-datalake-seb-690247773624
+  S3_PARQUET_KEY: curated/citibike_trips/citibike_dashboard_sample.parquet
+  S3_MODEL_PREFIX: models/
+  S3_DATA_KEY: curated/citibike_trips/citibike_curated.snappy.parquet
+  FLASK_ENV: production

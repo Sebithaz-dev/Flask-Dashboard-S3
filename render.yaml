@@ -5,7 +5,7 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false  # el deploy solo lo dispara el pipeline tras pasar CI
     envVars:
       - key: FLASK_ENV
         value: production
