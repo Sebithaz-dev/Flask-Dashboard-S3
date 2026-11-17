@@ -144,15 +144,13 @@ def create_app() -> Flask:
     def _handle_unexpected_error(exc):
         ERRORS.labels(type=type(exc).__name__).inc()
         app.logger.exception("unhandled_exception", extra=_log_extra())
-        return (
-            jsonify(
-                {
-                    "error": "Error interno",
-                    "request_id": getattr(g, "request_id", None),
-                }
-            ),
-            500,
+        response = jsonify(
+            {
+                "error": "Error interno",
+                "request_id": getattr(g, "request_id", None),
+            }
         )
+        return response, 500
 
     from app.routes import main
 
