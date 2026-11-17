@@ -129,9 +129,10 @@ def create_app() -> Flask:
 
     @app.errorhandler(Exception)
     def _handle_unexpected_error(exc):
-        # Los errores HTTP esperados (404, 405, etc.) conservan su respuesta.
+        # Los errores HTTP esperados (404, 405, etc.) conservan su respuesta
+        # y su codigo de estado original.
         if isinstance(exc, HTTPException):
-            return exc
+            return exc.get_response(), exc.code or 500
 
         ERRORS.labels(type=type(exc).__name__).inc()
         app.logger.exception("unhandled_exception", extra=_log_extra())

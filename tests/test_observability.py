@@ -35,6 +35,15 @@ def test_request_id_entrante_se_respeta():
     assert response.headers["X-Request-ID"] == "prueba-123"
 
 
+def test_error_http_conserva_su_codigo():
+    client = create_app().test_client()
+
+    response = client.get("/ruta-inexistente")
+
+    assert response.status_code == 404
+    assert response.headers.get("X-Request-ID")
+
+
 def test_error_no_controlado_devuelve_500_y_cuenta(monkeypatch):
     import app.routes as routes
 
