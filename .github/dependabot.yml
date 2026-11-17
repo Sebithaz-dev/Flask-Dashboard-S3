@@ -10,6 +10,11 @@ updates:
     labels: [dependencies, python]
     commit-message:
       prefix: "chore(deps)"
+    # Flask 3.0 y la matriz de Python 3.11 no soportan aun los saltos
+    # mayores (pandas 3, pytest 9, pytest-cov 7). Se revisan a mano.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Imagen base del Dockerfile
   - package-ecosystem: docker
@@ -20,6 +25,13 @@ updates:
     labels: [dependencies, docker]
     commit-message:
       prefix: "chore(docker)"
+    # python:3.11-slim -> 3.15-slim rompe el build (wheels y compilador).
+    # Solo se aceptan parches dentro de 3.11.x.
+    ignore:
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
 
   # Versiones de las actions usadas en los workflows
   - package-ecosystem: github-actions
@@ -30,3 +42,6 @@ updates:
     labels: [dependencies, ci]
     commit-message:
       prefix: "chore(ci)"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
