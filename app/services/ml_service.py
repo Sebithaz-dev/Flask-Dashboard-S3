@@ -49,11 +49,13 @@ def _descargar_artefactos():
     try:
         import boto3
         s3 = boto3.client("s3", region_name=region)
+        owner = os.getenv("S3_EXPECTED_BUCKET_OWNER")
+        extra_args = {"ExpectedBucketOwner": owner} if owner else None
         for fname in ["modelo.pkl", "transformers.pkl"]:
             key = f"{prefix.rstrip('/')}/{fname}"
             path = os.path.join(tmp, fname)
             print(f"[ml_service]   Descargando s3://{bucket}/{key}", flush=True)
-            s3.download_file(bucket, key, path)
+            s3.download_file(bucket, key, path, ExtraArgs=extra_args)
             print(f"[ml_service]   OK ({os.path.getsize(path)} bytes)", flush=True)
 
         modelo = joblib.load(os.path.join(tmp, "modelo.pkl"))
