@@ -17,7 +17,6 @@ import uuid
 from flask import Flask, g, jsonify, request
 from prometheus_client import Counter
 from prometheus_flask_exporter import PrometheusMetrics
-from werkzeug.exceptions import HTTPException
 
 from app.config import Config
 
@@ -127,13 +126,22 @@ def create_app() -> Flask:
         )
         return response
 
+    # Handlers explicitos por codigo: Sonar exige un status literal y, de
+    # paso, conservan las paginas de error HTML de Werkzeug.
+    @app.errorhandler(400)
+    def _handle_bad_request(exc):
+        return exc.get_response(), 400
+
+    @app.errorhandler(404)
+    def _handle_not_found(exc):
+        return exc.get_response(), 404
+
+    @app.errorhandler(405)
+    def _handle_method_not_allowed(exc):
+        return exc.get_response(), 405
+
     @app.errorhandler(Exception)
     def _handle_unexpected_error(exc):
-        # Los errores HTTP esperados (404, 405, etc.) conservan su respuesta
-        # y su codigo de estado original.
-        if isinstance(exc, HTTPException):
-            return exc.get_response(), exc.code or 500
-
         ERRORS.labels(type=type(exc).__name__).inc()
         app.logger.exception("unhandled_exception", extra=_log_extra())
         return (
