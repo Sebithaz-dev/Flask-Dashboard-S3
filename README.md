@@ -227,6 +227,8 @@ El modelo se entrena en un repositorio independiente: [Model-Training-S3](https:
   3. `k8s-staging`: crea un cluster kind, aplica `k8s/`, fija la imagen del commit, espera el rollout y prueba `/health` a través del Service.
   4. `publish` (solo push a `main`): publica `ghcr.io/sebithaz-dev/flask-dashboard-s3:<sha>` y `:latest`.
   5. `deploy` (solo push a `main`, environment `production`): dispara el deploy en Render.
+  6. `deploy-ecs` (solo push a `main`, environment `aws-ecs`): registra una revisión de la task definition con la imagen `:<sha>`, actualiza el servicio `dashboard` en ECS ([CitiBike-Infra](https://github.com/Sebithaz-dev/CitiBike-Infra)), espera estabilidad, falla si el circuit breaker hizo rollback y publica `DeploymentDurationSeconds` y `DeploymentSucceeded` en CloudWatch. Si el Learner Lab está apagado, se omite con un warning.
+- **Métricas de calidad en CloudWatch** (`CitiBike/CI`): el job `test` publica cobertura y tests (dimensión `Repo`) y `QualityGatePassed` (1 si los tests pasan, 0 si fallan). Corre aunque los tests fallen, para que la alarma `citibike-dev-ci-gate-failed` pueda activarse.
 - **Dependabot** (`.github/dependabot.yml`): PRs semanales para `pip`, imagen base de Docker y GitHub Actions.
 - **GitHub Actions `security.yml`**: analiza dependencias y código con Snyk, y publica métricas de calidad/cobertura en SonarCloud.
 - **Render**: `render.yaml` con `autoDeploy: false` (solo despliega el pipeline, después de pasar la CI) y `healthCheckPath: /health`.

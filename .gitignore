@@ -10,3 +10,4 @@ archivos-temp
 coverage.xml
 htmlcov/
 *.sarif
+report.xml

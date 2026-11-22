@@ -41,6 +41,7 @@ jobs:
 
       # Politica de calidad: todos los tests en verde y cobertura >= 70 %
       - name: Ejecutar tests + cobertura
+        id: tests
         run: |
           pytest --cov=app --cov-report=xml --cov-report=term --cov-fail-under=70 \
             --junitxml=report.xml
@@ -48,10 +49,15 @@ jobs:
       # Las metricas de IE3 (cobertura, tests, gate) se publican en CloudWatch
       # cuando hay credenciales validas del Learner Lab. Estas caducan cada 4 h,
       # asi que el preflight corre ANTES de configure-aws-credentials: sin
-      # credenciales el job sigue verde y solo deja un warning, para no
+      # credenciales el job no falla por eso y solo deja un warning, para no
       # confundir "no hay sesion de lab" con "fallo de calidad".
+      #
+      # Los pasos siguientes usan `if: always()`: tambien corren cuando los
+      # tests fallan, para publicar QualityGatePassed=0 y que la alarma
+      # citibike-dev-ci-gate-failed pueda pasar a ALARM.
       - name: Preflight de credenciales AWS
         id: aws
+        if: always()
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -69,7 +75,7 @@ jobs:
           fi
 
       - name: Configurar credenciales AWS
-        if: steps.aws.outputs.ready == 'true'
+        if: always() && steps.aws.outputs.ready == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -78,27 +84,42 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Publicar metricas de calidad en CloudWatch (CitiBike/CI)
-        if: steps.aws.outputs.ready == 'true'
+        if: always() && steps.aws.outputs.ready == 'true'
+        env:
+          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          REPO: Flask-Dashboard-S3
         run: |
           read -r coverage passed failed < <(python - <<'PY'
+          import os
           import xml.etree.ElementTree as ET
 
-          coverage = float(ET.parse("coverage.xml").getroot().get("line-rate", 0)) * 100
-          suite = ET.parse("report.xml").getroot()
-          tests = int(suite.get("tests", 0))
-          failed = int(suite.get("failures", 0)) + int(suite.get("errors", 0))
-          print(f"{coverage:.2f} {tests - failed} {failed}")
+          coverage = passed = failed = 0.0
+          if os.path.exists("coverage.xml"):
+              coverage = float(ET.parse("coverage.xml").getroot().get("line-rate", 0)) * 100
+          if os.path.exists("report.xml"):
+              root = ET.parse("report.xml").getroot()
+              suite = root if root.tag == "testsuite" else root.find("testsuite")
+              tests = int(suite.get("tests", 0))
+              failed = int(suite.get("failures", 0)) + int(suite.get("errors", 0))
+              passed = tests - failed
+          print(f"{coverage:.2f} {int(passed)} {int(failed)}")
           PY
           )
 
-          # QualityGatePassed = 1 porque el paso de tests ya exigio cobertura
-          # >= 70 % y cero fallas; si hubiera fallado, el job no llega aca.
+          # 1 solo si el paso de tests (que exige cobertura >= 70 % y cero
+          # fallas) termino bien; cualquier otro resultado publica 0.
+          if [ "$TESTS_OUTCOME" = "success" ]; then gate=1; else gate=0; fi
+
+          # Cobertura y tests van con la dimension Repo para distinguir ambos
+          # repos en Grafana; el gate va sin dimensiones porque la alarma
+          # citibike-dev-ci-gate-failed agrega todos los pipelines.
           aws cloudwatch put-metric-data --namespace CitiBike/CI --metric-data \
-            MetricName=TestCoveragePercent,Value="$coverage",Unit=Percent \
-            MetricName=TestsPassed,Value="$passed",Unit=Count \
-            MetricName=TestsFailed,Value="$failed",Unit=Count \
-            MetricName=QualityGatePassed,Value=1,Unit=None
-          echo "Publicado: cobertura ${coverage}%, ${passed} tests OK, ${failed} fallidos."
+            "MetricName=TestCoveragePercent,Value=${coverage},Unit=Percent,Dimensions=[{Name=Repo,Value=${REPO}}]" \
+            "MetricName=TestsPassed,Value=${passed},Unit=Count,Dimensions=[{Name=Repo,Value=${REPO}}]" \
+            "MetricName=TestsFailed,Value=${failed},Unit=Count,Dimensions=[{Name=Repo,Value=${REPO}}]"
+          aws cloudwatch put-metric-data --namespace CitiBike/CI --metric-data \
+            "MetricName=QualityGatePassed,Value=${gate},Unit=None"
+          echo "Publicado (${REPO}): cobertura ${coverage}%, ${passed} OK, ${failed} fallidos, gate=${gate}."
 
   docker-build:
     name: Build Docker image
@@ -223,3 +244,164 @@ jobs:
           curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+  # IE2 + IE3: despliegue automatico en el entorno orquestado de AWS (ECS).
+  # Registra una nueva revision de la task definition con la imagen del
+  # commit, actualiza el servicio, espera a que quede estable y publica la
+  # duracion en CloudWatch (CitiBike/CI/DeploymentDurationSeconds), que es lo
+  # que muestra el panel "Duracion del despliegue" de Grafana.
+  #
+  # Si el Learner Lab esta apagado (credenciales vencidas o cluster destruido)
+  # el job deja un warning y no falla: "no hay entorno" no es un fallo de
+  # calidad. Si el entorno existe y el despliegue no estabiliza (el circuit
+  # breaker de ECS hace rollback), el job falla.
+  deploy-ecs:
+    name: Deploy en AWS ECS
+    runs-on: ubuntu-latest
+    needs: publish
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    concurrency:
+      group: deploy-ecs
+      cancel-in-progress: false
+    environment:
+      name: aws-ecs
+    env:
+      CLUSTER: ${{ vars.ECS_CLUSTER || 'citibike-dev-cluster' }}
+      SERVICE: dashboard
+      CONTAINER: dashboard
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+    steps:
+      - name: Preflight de credenciales AWS
+        id: aws
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+        run: |
+          if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ] || [ -z "$AWS_SESSION_TOKEN" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Sin secrets de AWS: se omite el deploy en ECS."
+          elif aws sts get-caller-identity >/dev/null 2>&1; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Credenciales AWS expiradas: se omite el deploy en ECS."
+          fi
+
+      - name: Configurar credenciales AWS
+        if: steps.aws.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Verificar que el entorno ECS existe
+        id: env
+        if: steps.aws.outputs.ready == 'true'
+        run: |
+          status=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].status' --output text 2>/dev/null || echo "NONE")
+          if [ "$status" = "ACTIVE" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::El servicio ${SERVICE} no existe en ${CLUSTER} (entorno apagado): se omite el deploy."
+          fi
+
+      - name: Registrar task definition con la imagen del commit
+        id: taskdef
+        if: steps.env.outputs.ready == 'true'
+        run: |
+          current=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          echo "previous=$current" >> "$GITHUB_OUTPUT"
+
+          aws ecs describe-task-definition --task-definition "$current" \
+            --query 'taskDefinition' > current.json
+
+          # Misma definicion, pero con la imagen y el GIT_SHA de este commit.
+          jq --arg image "$IMAGE:${{ github.sha }}" --arg sha "${{ github.sha }}" --arg name "$CONTAINER" '
+            .containerDefinitions |= map(
+              if .name == $name then
+                .image = $image
+                | .environment = ((.environment // []) | map(select(.name != "GIT_SHA")) + [{name: "GIT_SHA", value: $sha}])
+              else . end)
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                  .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)
+          ' current.json > new.json
+
+          arn=$(aws ecs register-task-definition --cli-input-json file://new.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "arn=$arn" >> "$GITHUB_OUTPUT"
+          echo "Nueva revision: $arn"
+
+      - name: Actualizar el servicio y esperar estabilidad
+        id: deploy
+        if: steps.env.outputs.ready == 'true'
+        env:
+          NEW_TASKDEF: ${{ steps.taskdef.outputs.arn }}
+        run: |
+          start=$(date +%s)
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --task-definition "$NEW_TASKDEF" --query 'service.serviceName' --output text
+
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          end=$(date +%s)
+
+          # services-stable tambien termina "bien" si el circuit breaker hizo
+          # rollback a la revision anterior: hay que confirmar cual quedo.
+          running=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          if [ "$running" != "$NEW_TASKDEF" ]; then
+            echo "::error::ECS hizo rollback: sigue corriendo $running"
+            exit 1
+          fi
+
+          duration=$((end - start))
+          echo "duration=$duration" >> "$GITHUB_OUTPUT"
+          echo "Despliegue estable en ${duration}s."
+
+      - name: Publicar resultado del despliegue en CloudWatch (CitiBike/CI)
+        if: always() && steps.env.outputs.ready == 'true'
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          DURATION: ${{ steps.deploy.outputs.duration }}
+        run: |
+          if [ "$DEPLOY_OUTCOME" = "success" ]; then
+            aws cloudwatch put-metric-data --namespace CitiBike/CI --metric-data \
+              "MetricName=DeploymentDurationSeconds,Value=${DURATION},Unit=Seconds" \
+              "MetricName=DeploymentSucceeded,Value=1,Unit=None"
+          else
+            aws cloudwatch put-metric-data --namespace CitiBike/CI --metric-data \
+              "MetricName=DeploymentSucceeded,Value=0,Unit=None"
+          fi
+
+      - name: Resumen del despliegue
+        if: always()
+        env:
+          READY: ${{ steps.env.outputs.ready }}
+          OUTCOME: ${{ steps.deploy.outcome }}
+          DURATION: ${{ steps.deploy.outputs.duration }}
+          NEW_TASKDEF: ${{ steps.taskdef.outputs.arn }}
+          PREVIOUS: ${{ steps.taskdef.outputs.previous }}
+        run: |
+          {
+            echo "## Deploy en AWS ECS"
+            echo ""
+            if [ "$READY" != "true" ]; then
+              echo "Omitido: el entorno del Learner Lab no estaba disponible."
+            else
+              echo "| Campo | Valor |"
+              echo "| --- | --- |"
+              echo "| Commit | \`${{ github.sha }}\` |"
+              echo "| Imagen | \`$IMAGE:${{ github.sha }}\` |"
+              echo "| Revision anterior | \`$PREVIOUS\` |"
+              echo "| Revision nueva | \`$NEW_TASKDEF\` |"
+              echo "| Resultado | $OUTCOME |"
+              echo "| Duracion | ${DURATION:-n/a} s |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
