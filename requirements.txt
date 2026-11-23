@@ -8,3 +8,4 @@ boto3
 python-dotenv
 joblib>=1.6.0
 scikit-learn==1.9.1
+django==2.2
